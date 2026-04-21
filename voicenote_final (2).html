@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>VoiceNote — Speech to Text</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#080b12;
+  --card:#0f1420;
+  --card2:#141926;
+  --border:rgba(255,255,255,0.07);
+  --border2:rgba(255,255,255,0.13);
+  --text:#edeaf3;
+  --muted:#7b7891;
+  --hint:#3e3c52;
+  --purple:#7c5cfc;
+  --purple-dim:rgba(124,92,252,0.12);
+  --purple-glow:rgba(124,92,252,0.3);
+  --purple-light:#a98ffe;
+  --teal:#22d3a0;
+  --teal-dim:rgba(34,211,160,0.1);
+  --teal-glow:rgba(34,211,160,0.25);
+  --green:#22d3a0;
+  --red:#f06060;
+  --red-dim:rgba(240,96,96,0.1);
+  --amber:#f0a040;
+  --r:14px;
+  --r-sm:10px;
+  --font:'Sora',sans-serif;
+  --mono:'DM Mono',monospace;
+}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  min-height:100vh;
+  position:relative;
+  overflow-x:hidden;
+}
+
+/* ══════════════════════════════
+   MIC PERMISSION OVERLAY
+══════════════════════════════ */
+#mic-overlay{
+  position:fixed;inset:0;z-index:100;
+  background:rgba(8,11,18,0.92);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  display:none;align-items:center;justify-content:center;padding:1.5rem;
+}
+#mic-overlay.show{display:flex;}
+.mic-perm-card{
+  background:var(--card);
+  border:1px solid var(--border2);
+  border-radius:20px;
+  padding:2rem 1.75rem;
+  max-width:360px;width:100%;
+  display:flex;flex-direction:column;align-items:center;gap:1.25rem;
+  text-align:center;
+}
+.perm-icon-wrap{
+  width:72px;height:72px;border-radius:22px;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+  transition:all 0.3s;
+}
+.perm-icon-wrap.idle{background:var(--purple-dim);border:1px solid rgba(124,92,252,0.3);}
+.perm-icon-wrap.asking{background:var(--purple-dim);border:1px solid rgba(124,92,252,0.5);animation:permPulse 1.6s infinite;}
+.perm-icon-wrap.granted{background:rgba(34,211,160,0.12);border:1px solid rgba(34,211,160,0.35);}
+.perm-icon-wrap.denied{background:rgba(240,96,96,0.1);border:1px solid rgba(240,96,96,0.3);}
+@keyframes permPulse{0%,100%{box-shadow:0 0 0 0 var(--purple-glow)}60%{box-shadow:0 0 0 16px rgba(124,92,252,0)}}
+
+.perm-title{font-size:18px;font-weight:600;color:var(--text);}
+.perm-sub{font-size:13px;color:var(--muted);line-height:1.7;max-width:280px;}
+
+.perm-steps{
+  width:100%;display:flex;flex-direction:column;gap:8px;
+  background:var(--card2);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:1rem;text-align:left;
+}
+.perm-step{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--muted);line-height:1.6;}
+.perm-step-num{
+  width:20px;height:20px;border-radius:50%;
+  background:var(--purple-dim);border:1px solid rgba(124,92,252,0.3);
+  color:var(--purple-light);font-size:10px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;
+}
+
+.perm-badge{
+  font-size:11px;font-weight:500;padding:4px 14px;border-radius:99px;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.perm-badge.granted{background:rgba(34,211,160,0.12);color:var(--teal);border:1px solid rgba(34,211,160,0.25);}
+.perm-badge.denied{background:var(--red-dim);color:var(--red);border:1px solid rgba(240,96,96,0.25);}
+
+.btn-perm{
+  width:100%;padding:13px;border-radius:var(--r-sm);border:none;
+  font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;
+}
+.btn-perm.ask{background:var(--purple);color:#fff;}
+.btn-perm.ask:hover{background:#8d6ffd;transform:translateY(-1px);}
+.btn-perm.skip{background:transparent;color:var(--muted);border:1px solid var(--border2);}
+.btn-perm.skip:hover{color:var(--text);border-color:var(--border2);}
+.btn-perm.proceed{background:var(--teal);color:#0a1a14;}
+.btn-perm.proceed:hover{filter:brightness(1.08);transform:translateY(-1px);}
+
+/* ── Ambient orbs ── */
+.orb{position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0;}
+.orb-1{width:340px;height:340px;background:rgba(124,92,252,0.11);top:-100px;right:-80px;}
+.orb-2{width:300px;height:300px;background:rgba(34,211,160,0.07);bottom:-80px;left:-60px;}
+
+/* ── Views ── */
+.view{display:none;min-height:100vh;position:relative;z-index:1;}
+.view.active{display:flex;flex-direction:column;}
+
+/* ══════════════════════════════
+   AUTH VIEW
+══════════════════════════════ */
+#view-auth{
+  align-items:center;
+  justify-content:center;
+  padding:1.5rem 1rem;
+}
+.auth-wrap{width:100%;max-width:400px;display:flex;flex-direction:column;gap:0;}
+
+.logo-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:1.75rem;}
+.logo-icon{
+  width:56px;height:56px;
+  background:var(--purple-dim);
+  border:1px solid rgba(124,92,252,0.25);
+  border-radius:18px;
+  display:flex;align-items:center;justify-content:center;
+}
+.logo-title{font-size:22px;font-weight:600;}
+.logo-sub{font-size:13px;color:var(--muted);}
+
+.tab-bar{
+  display:flex;background:var(--card2);
+  border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:4px;gap:4px;margin-bottom:0;
+}
+.tab{
+  flex:1;text-align:center;padding:9px;border-radius:8px;
+  font-size:13px;font-weight:500;color:var(--muted);
+  cursor:pointer;transition:all 0.2s;border:none;
+  background:transparent;font-family:var(--font);
+}
+.tab.active{background:var(--purple-dim);color:var(--purple-light);border:1px solid rgba(124,92,252,0.25);}
+
+.auth-form{display:none;flex-direction:column;gap:1.1rem;}
+.auth-form.active{display:flex;}
+
+.card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);padding:1.75rem 1.5rem;
+  display:flex;flex-direction:column;gap:1.25rem;
+}
+
+.voice-bar{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:var(--purple-dim);border:1px solid rgba(124,92,252,0.2);
+  border-radius:var(--r-sm);font-size:12px;color:var(--purple-light);
+  opacity:0;transform:translateY(-4px);transition:all 0.25s;pointer-events:none;
+}
+.voice-bar.show{opacity:1;transform:translateY(0);}
+.vwave{display:flex;align-items:center;gap:2px;flex-shrink:0;}
+.wb{width:3px;border-radius:2px;background:var(--purple-light);animation:wup 0.7s ease-in-out infinite;}
+.wb:nth-child(2){animation-delay:.1s}.wb:nth-child(3){animation-delay:.2s}
+.wb:nth-child(4){animation-delay:.3s}.wb:nth-child(5){animation-delay:.15s}
+@keyframes wup{0%,100%{height:4px}50%{height:16px}}
+
+.field{display:flex;flex-direction:column;gap:5px;}
+.field-label{font-size:12px;color:var(--muted);font-weight:500;}
+.field-wrap{
+  display:flex;align-items:center;
+  background:var(--card2);border:1px solid var(--border2);
+  border-radius:var(--r-sm);overflow:hidden;
+  transition:border-color 0.2s,box-shadow 0.2s;
+}
+.field-wrap:focus-within{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-dim);}
+.field-wrap.listening{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-dim);animation:fpulse 1.5s infinite;}
+.field-wrap.filled{border-color:rgba(34,211,160,0.3);}
+.field-wrap.err{border-color:var(--red);box-shadow:0 0 0 3px var(--red-dim);}
+@keyframes fpulse{0%,100%{box-shadow:0 0 0 3px var(--purple-dim)}50%{box-shadow:0 0 0 5px rgba(124,92,252,0.18)}}
+
+.fi{padding:0 12px;color:var(--hint);flex-shrink:0;display:flex;align-items:center;}
+input[type=text],input[type=email],input[type=password],input[type=tel]{
+  flex:1;background:transparent;border:none;outline:none;
+  color:var(--text);font-family:var(--font);font-size:14px;
+  padding:13px 0;min-width:0;
+}
+input::placeholder{color:var(--hint);font-size:13px;}
+
+.mic-btn-f{
+  width:42px;height:42px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;cursor:pointer;color:var(--muted);border:none;
+  background:transparent;transition:color 0.2s;position:relative;
+}
+.mic-btn-f:hover{color:var(--purple-light);}
+.mic-btn-f.active{color:var(--purple-light);}
+.mic-dot{width:6px;height:6px;border-radius:50%;background:var(--purple);
+  position:absolute;top:6px;right:6px;display:none;}
+.mic-btn-f.active .mic-dot{display:block;animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+
+.eye-btn{width:42px;height:42px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;cursor:pointer;color:var(--muted);border:none;background:transparent;transition:color 0.2s;}
+.eye-btn:hover{color:var(--text);}
+
+.field-hint{font-size:11px;color:var(--hint);padding-left:2px;min-height:14px;transition:color 0.2s;}
+.field-hint.listening{color:var(--purple-light);}
+.field-hint.err{color:var(--red);}
+.field-hint.ok{color:var(--teal);}
+
+.strength-bar{display:flex;gap:4px;margin-top:4px;}
+.ss{height:3px;flex:1;border-radius:2px;background:var(--border2);transition:background 0.3s;}
+
+.btn-primary{
+  width:100%;padding:14px;border-radius:var(--r-sm);border:none;
+  background:var(--purple);color:#fff;font-family:var(--font);
+  font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;letter-spacing:0.02em;
+}
+.btn-primary:hover{background:#8d6ffd;transform:translateY(-1px);}
+.btn-primary:active{transform:scale(0.98);}
+
+.divider{display:flex;align-items:center;gap:10px;color:var(--hint);font-size:12px;}
+.divider::before,.divider::after{content:'';flex:1;height:0.5px;background:var(--border);}
+
+.social-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.btn-social{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:11px;border-radius:var(--r-sm);border:1px solid var(--border2);
+  background:var(--card2);color:var(--muted);font-family:var(--font);
+  font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;
+}
+.btn-social:hover{color:var(--text);background:rgba(255,255,255,0.04);}
+
+.switch-text{text-align:center;font-size:13px;color:var(--muted);padding:0.5rem 0 0;}
+.switch-link{color:var(--purple-light);cursor:pointer;font-weight:500;
+  background:none;border:none;font-family:var(--font);font-size:13px;
+  text-decoration:underline;text-underline-offset:2px;}
+
+.terms{font-size:11px;color:var(--hint);text-align:center;line-height:1.7;}
+.terms a{color:var(--muted);text-decoration:underline;text-underline-offset:2px;}
+
+/* ══════════════════════════════
+   APP VIEW — Speech to Text
+══════════════════════════════ */
+#view-app{flex-direction:column;}
+
+/* App header */
+.app-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1.1rem 1.5rem;
+  border-bottom:1px solid var(--border);
+  background:rgba(8,11,18,0.85);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  position:sticky;top:0;z-index:10;
+}
+.app-brand{display:flex;align-items:center;gap:10px;}
+.brand-icon{
+  width:34px;height:34px;border-radius:10px;
+  background:var(--purple-dim);border:1px solid rgba(124,92,252,0.25);
+  display:flex;align-items:center;justify-content:center;
+}
+.brand-name{font-size:15px;font-weight:600;color:var(--text);}
+
+.header-right{display:flex;align-items:center;gap:10px;}
+.user-chip{
+  display:flex;align-items:center;gap:8px;
+  background:var(--card2);border:1px solid var(--border);
+  border-radius:99px;padding:5px 12px 5px 5px;
+  font-size:12px;color:var(--muted);
+}
+.user-avatar{
+  width:24px;height:24px;border-radius:50%;
+  background:var(--purple-dim);border:1px solid rgba(124,92,252,0.3);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:600;color:var(--purple-light);
+}
+.signout-btn{
+  background:none;border:1px solid var(--border);border-radius:var(--r-sm);
+  color:var(--muted);font-family:var(--font);font-size:12px;
+  padding:6px 12px;cursor:pointer;transition:all 0.2s;
+}
+.signout-btn:hover{border-color:var(--border2);color:var(--text);}
+
+/* App body */
+.app-body{
+  flex:1;display:flex;flex-direction:column;gap:1.25rem;
+  max-width:860px;width:100%;margin:0 auto;padding:1.5rem;
+}
+
+/* Status pill */
+.status-pill{
+  font-size:12px;padding:4px 12px;border-radius:99px;
+  border:1px solid var(--border2);color:var(--muted);background:var(--card2);transition:all 0.3s;
+  align-self:flex-start;
+}
+.status-pill.recording{border-color:var(--teal);color:var(--teal);background:var(--teal-dim);}
+.status-pill.error{border-color:var(--red);color:var(--red);background:var(--red-dim);}
+
+/* Controls */
+.stt-controls{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+.big-mic{
+  width:64px;height:64px;border-radius:50%;
+  border:1px solid var(--border2);background:var(--card2);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  position:relative;transition:all 0.25s;flex-shrink:0;outline:none;
+}
+.big-mic:hover{border-color:var(--teal);background:var(--teal-dim);}
+.big-mic.active{border-color:var(--teal);background:var(--teal-dim);animation:bigpulse 1.8s infinite;}
+.big-mic.active .mic-svg{fill:var(--teal);}
+.mic-svg{fill:var(--muted);transition:fill 0.25s;width:24px;height:24px;}
+@keyframes bigpulse{0%{box-shadow:0 0 0 0px var(--teal-glow)}60%{box-shadow:0 0 0 14px rgba(34,211,160,0)}100%{box-shadow:0 0 0 0px rgba(34,211,160,0)}}
+
+.controls-right{display:flex;flex-direction:column;gap:8px;flex:1;}
+.ctrl-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+
+select{
+  background:var(--card2);border:1px solid var(--border2);color:var(--text);
+  font-family:var(--font);font-size:13px;padding:7px 30px 7px 12px;
+  border-radius:var(--r-sm);cursor:pointer;outline:none;transition:border-color 0.2s;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a7872' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+select:focus{border-color:var(--purple);}
+
+.icon-btn{
+  background:var(--card2);border:1px solid var(--border);color:var(--muted);
+  font-family:var(--font);font-size:12px;padding:7px 14px;border-radius:var(--r-sm);
+  cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:5px;
+}
+.icon-btn:hover{border-color:var(--border2);color:var(--text);}
+.icon-btn.danger:hover{border-color:var(--red);color:var(--red);}
+
+.stats-row{display:flex;gap:1.5rem;font-size:12px;color:var(--hint);}
+.stat-val{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums;}
+
+/* Waveform */
+.waveform{height:40px;display:flex;align-items:center;gap:2px;overflow:hidden;}
+.wbar{width:3px;border-radius:2px;background:var(--teal);opacity:0.25;height:4px;flex-shrink:0;transition:height 0.08s ease;}
+.wbar.active{opacity:0.7;}
+
+/* Transcript */
+.transcript-box{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  min-height:260px;max-height:400px;overflow-y:auto;padding:1.5rem;position:relative;
+  scrollbar-width:thin;scrollbar-color:var(--card2) transparent;
+}
+.transcript-box::-webkit-scrollbar{width:5px;}
+.transcript-box::-webkit-scrollbar-thumb{background:var(--card2);border-radius:3px;}
+
+.t-placeholder{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;
+  color:var(--hint);font-size:13px;pointer-events:none;transition:opacity 0.3s;text-align:center;
+}
+.t-placeholder svg{opacity:0.25;margin-bottom:4px;}
+#t-text{font-family:var(--mono);font-size:15px;line-height:1.8;color:var(--text);
+  white-space:pre-wrap;word-break:break-word;}
+.interim-text{color:var(--muted);font-style:italic;}
+
+/* Session history */
+.sessions-section{display:flex;flex-direction:column;gap:8px;}
+.sessions-hdr{display:flex;align-items:center;justify-content:space-between;
+  font-size:11px;color:var(--muted);font-weight:500;letter-spacing:0.06em;text-transform:uppercase;padding:0 2px;}
+.session-item{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  cursor:pointer;transition:border-color 0.2s;
+}
+.session-item:hover{border-color:var(--border2);}
+.session-preview{font-size:13px;color:var(--muted);font-family:var(--mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.session-meta{font-size:11px;color:var(--hint);flex-shrink:0;}
+
+/* ── Toast ── */
+.toast{
+  position:fixed;bottom:1.5rem;left:50%;
+  transform:translateX(-50%) translateY(16px);
+  background:var(--card);border:1px solid var(--border2);color:var(--text);
+  font-size:12px;padding:9px 20px;border-radius:99px;
+  opacity:0;transition:all 0.3s;pointer-events:none;white-space:nowrap;
+  z-index:999;font-family:var(--font);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+@media(max-width:540px){
+  .app-body{padding:1rem;}
+  .ctrl-row{gap:6px;}
+  .stats-row{gap:1rem;}
+}
+</style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<!-- ════════════════════════════════
+     AUTH VIEW
+════════════════════════════════ -->
+<div class="view active" id="view-auth">
+  <div class="auth-wrap">
+
+    <div class="logo-wrap">
+      <div class="logo-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+          <rect x="9" y="2" width="6" height="11" rx="3" fill="rgba(169,143,254,0.5)"/>
+          <path d="M5 10a7 7 0 0 0 14 0" stroke="#a98ffe" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <line x1="12" y1="19" x2="12" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="9" y1="22" x2="15" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <p class="logo-title">VoiceNote</p>
+      <p class="logo-sub" id="auth-sub">Sign in to start transcribing</p>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab active" id="tab-si" onclick="authTab('signin')">Sign In</button>
+      <button class="tab" id="tab-su" onclick="authTab('signup')">Sign Up</button>
+    </div>
+
+    <!-- SIGN IN FORM -->
+    <div class="auth-form active card" id="form-signin" style="margin-top:0;border-top-left-radius:0;border-top-right-radius:0;border-top:none;">
+
+      <div class="voice-bar" id="si-vbar">
+        <div class="vwave"><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div></div>
+        <span id="si-vtext">Listening…</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="si-email">Email or phone</label>
+        <div class="field-wrap" id="si-ew">
+          <span class="fi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
+          <input type="email" id="si-email" placeholder="you@example.com" autocomplete="email" oninput="fieldInput('si-ew','si-eh')"/>
+          <button class="mic-btn-f" id="mf-si-email" onclick="voiceField('si-email','si-ew','si-eh','si-vbar','si-vtext','email')" aria-label="Voice input">
+            <div class="mic-dot"></div><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="22" x2="15" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <span class="field-hint" id="si-eh">Tap mic to speak</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="si-pass">Password</label>
+        <div class="field-wrap" id="si-pw">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <input type="password" id="si-pass" placeholder="Enter password" autocomplete="current-password"/>
+          <button class="eye-btn" onclick="togglePw('si-pass',this)" aria-label="Show/hide"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button class="mic-btn-f" id="mf-si-pass" onclick="voiceField('si-pass','si-pw','si-ph','si-vbar','si-vtext','password')" aria-label="Voice input">
+            <div class="mic-dot"></div><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="22" x2="15" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <span class="field-hint" id="si-ph">Tap mic to speak</span>
+      </div>
+
+      <button class="btn-primary" onclick="doSignIn()">Sign In</button>
+
+      <div class="divider">or continue with</div>
+      <div class="social-row">
+        <button class="btn-social" onclick="doSignIn()"><svg width="15" height="15" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.83z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>Google</button>
+        <button class="btn-social" onclick="doSignIn()"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.57-2.987 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.572-2.27 1.206-2.98.804-.94 2.142-1.64 3.248-1.68.03.13.05.28.05.43zm4.565 15.71c-.03.07-.463 1.58-1.518 3.12-.945 1.34-1.94 2.71-3.43 2.71-1.517 0-1.9-.88-3.63-.88-1.698 0-2.302.91-3.67.91-1.377 0-2.332-1.26-3.428-2.54-1.287-1.5-2.087-3.46-2.087-5.33 0-3.51 2.28-5.36 4.528-5.36 1.17 0 2.15.77 2.886.77.7 0 1.8-.83 3.13-.83.48 0 2.01.06 3.08 1.48zm-2.65-17.47c-.03-.14-.09-.28-.15-.41-.51-1.04-1.47-1.72-2.47-1.72-.08 0-.15 0-.22.01 1.03.36 1.86 1.25 2.18 2.17.03.08.05.16.07.24.09-.03.19-.07.26-.11.11-.06.23-.12.33-.18z"/></svg>Apple</button>
+      </div>
+    </div>
+
+    <p class="switch-text"><span id="si-switch-txt">Don't have an account?</span> <button class="switch-link" onclick="authTab('signup')">Sign up</button></p>
+
+    <!-- SIGN UP FORM (hidden) -->
+    <div class="auth-form card" id="form-signup" style="margin-top:0;border-top-left-radius:0;border-top-right-radius:0;border-top:none;">
+
+      <div class="voice-bar" id="su-vbar">
+        <div class="vwave"><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div></div>
+        <span id="su-vtext">Listening…</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Full name</label>
+        <div class="field-wrap" id="su-nw">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+          <input type="text" id="su-name" placeholder="Jane Doe" autocomplete="name" oninput="fieldInput('su-nw','su-nh')"/>
+          <button class="mic-btn-f" id="mf-su-name" onclick="voiceField('su-name','su-nw','su-nh','su-vbar','su-vtext','name')" aria-label="Voice input"><div class="mic-dot"></div><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="22" x2="15" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        </div>
+        <span class="field-hint" id="su-nh">Tap mic to speak</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Phone number</label>
+        <div class="field-wrap" id="su-phw">
+          <span class="fi"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.37 2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.85a16 16 0 0 0 6 6l.92-.93a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
+          <input type="tel" id="su-phone" placeholder="+91 98765 43210" autocomplete="tel" oninput="fieldInput('su-phw','su-phh')"/>
+          <button class="mic-btn-f" id="mf-su-phone" onclick="voiceField('su-phone','su-phw','su-phh','su-vbar','su-vtext','phone number')" aria-label="Voice input"><div class="mic-dot"></div><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="22" x2="15" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        </div>
+        <span class="field-hint" id="su-phh">Tap mic to speak</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Email address</label>
+        <div class="field-wrap" id="su-ew">
+          <span class="fi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
+          <input type="email" id="su-email" placeholder="you@example.com" autocomplete="email" oninput="fieldInput('su-ew','su-eh')"/>
+          <button class="mic-btn-f" id="mf-su-email" onclick="voiceField('su-email','su-ew','su-eh','su-vbar','su-vtext','email')" aria-label="Voice input"><div class="mic-dot"></div><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="22" x2="15" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        </div>
+        <span class="field-hint" id="su-eh">Tap mic to speak</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Password</label>
+        <div class="field-wrap" id="su-pw">
+          <span class="fi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <input type="password" id="su-pass" placeholder="Create password" autocomplete="new-password" oninput="checkStr()"/>
+          <button class="eye-btn" onclick="togglePw('su-pass',this)" aria-label="Show/hide"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button class="mic-btn-f" id="mf-su-pass" onclick="voiceField('su-pass','su-pw','su-pah','su-vbar','su-vtext','password')" aria-label="Voice input"><div class="mic-dot"></div><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="22" x2="15" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        </div>
+        <div class="strength-bar"><div class="ss" id="s1"></div><div class="ss" id="s2"></div><div class="ss" id="s3"></div><div class="ss" id="s4"></div></div>
+        <span class="field-hint" id="su-pah">Tap mic to speak</span>
+      </div>
+
+      <button class="btn-primary" onclick="doSignUp()">Create Account</button>
+      <p class="terms">By signing up you agree to our <a href="#">Terms</a> and <a href="#">Privacy Policy</a></p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════
+     APP VIEW — Speech to Text
+════════════════════════════════ -->
+<div class="view" id="view-app">
+
+  <header class="app-header">
+    <div class="app-brand">
+      <div class="brand-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <rect x="9" y="2" width="6" height="11" rx="3" fill="rgba(169,143,254,0.6)"/>
+          <path d="M5 10a7 7 0 0 0 14 0" stroke="#a98ffe" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <line x1="12" y1="19" x2="12" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="9" y1="22" x2="15" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="brand-name">VoiceNote</span>
+    </div>
+    <div class="header-right">
+      <div class="user-chip">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <span id="user-name-chip">User</span>
+      </div>
+      <button class="signout-btn" onclick="signOut()">Sign out</button>
+    </div>
+  </header>
+
+  <div class="app-body">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <div class="status-pill" id="stt-status">Ready</div>
+      <div style="font-size:12px;color:var(--hint);">Press Space to toggle recording</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="stt-controls">
+      <button class="big-mic" id="big-mic" onclick="toggleRec()" aria-label="Start recording">
+        <svg class="mic-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <rect x="9" y="2" width="6" height="11" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="9" y1="22" x2="15" y2="22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="controls-right">
+        <div class="ctrl-row">
+          <select id="lang-sel" onchange="onLangChange()">
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="hi-IN">Hindi</option>
+            <option value="es-ES">Spanish</option>
+            <option value="fr-FR">French</option>
+            <option value="de-DE">German</option>
+            <option value="it-IT">Italian</option>
+            <option value="pt-BR">Portuguese (BR)</option>
+            <option value="ja-JP">Japanese</option>
+            <option value="zh-CN">Chinese (Simplified)</option>
+            <option value="ar-SA">Arabic</option>
+            <option value="ko-KR">Korean</option>
+            <option value="ru-RU">Russian</option>
+          </select>
+          <button class="icon-btn" onclick="copyTx()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
+          <button class="icon-btn" onclick="dlTx()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download</button>
+          <button class="icon-btn danger" onclick="clearTx()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear</button>
+        </div>
+        <div class="stats-row">
+          <span>Words <span class="stat-val" id="wc">0</span></span>
+          <span>Chars <span class="stat-val" id="cc">0</span></span>
+          <span>Duration <span class="stat-val" id="dur">0:00</span></span>
+          <span>Sessions <span class="stat-val" id="sc">0</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Waveform -->
+    <div class="waveform" id="waveform" aria-hidden="true"></div>
+
+    <!-- Transcript -->
+    <div class="transcript-box">
+      <div class="t-placeholder" id="t-ph">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
+        <span>Click the microphone to start transcribing</span>
+        <span style="font-size:11px;color:var(--hint);">Microphone permission required</span>
+      </div>
+      <div id="t-text"></div>
+    </div>
+
+    <!-- Sessions -->
+    <div class="sessions-section" id="sess-sect" style="display:none;">
+      <div class="sessions-hdr">
+        <span>Session history</span>
+        <button class="icon-btn danger" onclick="clearHistory()" style="font-size:11px;padding:3px 10px;">Clear all</button>
+      </div>
+      <div id="sess-list"></div>
+    </div>
+
+    <p style="font-size:11px;color:var(--hint);text-align:center;padding-bottom:0.5rem;">Uses Web Speech API · Works best in Chrome / Edge · Speech processed locally</p>
+  </div>
+
+</div>
+
+<!-- ════ MIC PERMISSION OVERLAY ════ -->
+<div id="mic-overlay">
+  <div class="mic-perm-card">
+    <div class="perm-icon-wrap idle" id="perm-icon">
+      <svg id="perm-svg" width="30" height="30" viewBox="0 0 24 24" fill="none">
+        <rect x="9" y="2" width="6" height="11" rx="3" fill="rgba(169,143,254,0.6)"/>
+        <path d="M5 10a7 7 0 0 0 14 0" stroke="#a98ffe" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <line x1="12" y1="19" x2="12" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="9" y1="22" x2="15" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div>
+      <p class="perm-title" id="perm-title">Microphone access</p>
+      <p class="perm-sub" id="perm-sub">VoiceNote needs your microphone to transcribe speech. Your audio is processed locally and never stored.</p>
+    </div>
+    <div class="perm-steps" id="perm-steps" style="display:none;">
+      <div class="perm-step"><div class="perm-step-num">1</div><span>Tap the <strong style="color:var(--text)">lock / info icon</strong> in your browser address bar</span></div>
+      <div class="perm-step"><div class="perm-step-num">2</div><span>Find <strong style="color:var(--text)">Microphone</strong> and set it to <strong style="color:var(--text)">Allow</strong></span></div>
+      <div class="perm-step"><div class="perm-step-num">3</div><span>Reload the page, then tap <strong style="color:var(--text)">Allow microphone</strong> again</span></div>
+    </div>
+    <div id="perm-badge-wrap" style="display:none;">
+      <span class="perm-badge" id="perm-badge"></span>
+    </div>
+    <div style="width:100%;display:flex;flex-direction:column;gap:8px;" id="perm-actions">
+      <button class="btn-perm ask" id="btn-allow" onclick="requestMicPerm()">Allow microphone</button>
+      <button class="btn-perm skip" id="btn-skip" onclick="skipMicPerm()">Skip for now</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ─── State ─── */
+let currentUser = null;
+let recognition = null;
+let isRec = false;
+let finalTx = '';
+let sessStart = null;
+let timerInt = null;
+let totalSec = 0;
+let sessions = [];
+let activeRec = null;
+let activeMicF = null;
+let activeWrapF = null;
+let waveBars = [];
+let waveAF = null;
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/* ─── Waveform setup ─── */
+const wfEl = document.getElementById('waveform');
+for (let i = 0; i < 52; i++) {
+  const b = document.createElement('div');
+  b.className = 'wbar';
+  wfEl.appendChild(b);
+  waveBars.push(b);
+}
+
+function animWave(on) {
+  cancelAnimationFrame(waveAF);
+  if (!on) { waveBars.forEach(b => { b.style.height='4px'; b.classList.remove('active'); }); return; }
+  (function frame() {
+    waveBars.forEach(b => { b.style.height = (4 + Math.random()*34) + 'px'; b.classList.add('active'); });
+    waveAF = requestAnimationFrame(frame);
+  })();
+}
+
+/* ─── Auth helpers ─── */
+function authTab(tab) {
+  stopAllVoice();
+  const si = tab === 'signin';
+  document.getElementById('tab-si').classList.toggle('active', si);
+  document.getElementById('tab-su').classList.toggle('active', !si);
+  document.getElementById('form-signin').classList.toggle('active', si);
+  document.getElementById('form-signup').classList.toggle('active', !si);
+  document.getElementById('auth-sub').textContent = si ? 'Sign in to start transcribing' : 'Create your free account';
+  document.getElementById('si-switch-txt').textContent = si ? "Don't have an account?" : 'Already have an account?';
+  document.querySelector('.switch-link').textContent = si ? 'Sign up' : 'Sign in';
+  document.querySelector('.switch-link').onclick = si ? () => authTab('signup') : () => authTab('signin');
+}
+
+function doSignIn() {
+  stopAllVoice();
+  const email = document.getElementById('si-email').value.trim();
+  const pass = document.getElementById('si-pass').value;
+  if (!email) { markErr('si-ew','si-eh','Enter your email'); return; }
+  if (!pass) { markErr('si-pw','si-ph','Enter your password'); return; }
+  loginUser(email.split('@')[0] || 'User');
+}
+
+function doSignUp() {
+  stopAllVoice();
+  const name = document.getElementById('su-name').value.trim();
+  const phone = document.getElementById('su-phone').value.trim();
+  const email = document.getElementById('su-email').value.trim();
+  const pass = document.getElementById('su-pass').value;
+  if (!name) { markErr('su-nw','su-nh','Enter your name'); return; }
+  if (!phone) { markErr('su-phw','su-phh','Enter your phone'); return; }
+  if (!email) { markErr('su-ew','su-eh','Enter your email'); return; }
+  if (pass.length < 6) { markErr('su-pw','su-pah','Password must be 6+ characters'); return; }
+  loginUser(name.split(' ')[0]);
+}
+
+let micPermGranted = false;
+
+function loginUser(name) {
+  currentUser = name;
+  document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+  document.getElementById('user-name-chip').textContent = name;
+  document.getElementById('view-auth').classList.remove('active');
+  document.getElementById('view-app').classList.add('active');
+  checkMicPermState(name);
+}
+
+async function checkMicPermState(name) {
+  if (navigator.permissions) {
+    try {
+      const result = await navigator.permissions.query({ name: 'microphone' });
+      if (result.state === 'granted') {
+        micPermGranted = true;
+        toast('Welcome, ' + name + '!');
+        return;
+      } else if (result.state === 'denied') {
+        showMicOverlay('denied');
+        return;
+      }
+    } catch(e) {}
+  }
+  showMicOverlay('idle');
+}
+
+function showMicOverlay(state) {
+  const overlay = document.getElementById('mic-overlay');
+  const icon = document.getElementById('perm-icon');
+  const title = document.getElementById('perm-title');
+  const sub = document.getElementById('perm-sub');
+  const steps = document.getElementById('perm-steps');
+  const badgeWrap = document.getElementById('perm-badge-wrap');
+  const badge = document.getElementById('perm-badge');
+  const actions = document.getElementById('perm-actions');
+  overlay.classList.add('show');
+  if (state === 'idle') {
+    icon.className = 'perm-icon-wrap idle';
+    icon.innerHTML = `<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="11" rx="3" fill="rgba(169,143,254,0.6)"/><path d="M5 10a7 7 0 0 0 14 0" stroke="#a98ffe" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="22" x2="15" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    title.textContent = 'Microphone access';
+    sub.textContent = "VoiceNote needs your microphone to transcribe speech. Your audio is processed locally and never stored.";
+    steps.style.display = 'none'; badgeWrap.style.display = 'none';
+    actions.innerHTML = `<button class="btn-perm ask" onclick="requestMicPerm()">Allow microphone</button><button class="btn-perm skip" onclick="skipMicPerm()">Skip for now</button>`;
+  } else if (state === 'asking') {
+    icon.className = 'perm-icon-wrap asking';
+    icon.innerHTML = `<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="11" rx="3" fill="rgba(169,143,254,0.6)"/><path d="M5 10a7 7 0 0 0 14 0" stroke="#a98ffe" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="22" x2="15" y2="22" stroke="#a98ffe" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    title.textContent = 'Waiting for permission…';
+    sub.textContent = 'A browser prompt should appear. Tap "Allow" to enable microphone access.';
+    steps.style.display = 'none'; badgeWrap.style.display = 'none';
+    actions.innerHTML = `<button class="btn-perm skip" style="opacity:0.5;pointer-events:none;">Waiting…</button>`;
+  } else if (state === 'granted') {
+    icon.className = 'perm-icon-wrap granted';
+    icon.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22d3a0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    title.textContent = 'Microphone enabled!';
+    sub.textContent = "You're all set. VoiceNote can now transcribe your speech in real time.";
+    steps.style.display = 'none';
+    badgeWrap.style.display = 'flex'; badgeWrap.style.justifyContent = 'center';
+    badge.className = 'perm-badge granted';
+    badge.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Microphone allowed`;
+    actions.innerHTML = `<button class="btn-perm proceed" onclick="closeMicOverlay()">Start transcribing</button>`;
+  } else if (state === 'denied') {
+    icon.className = 'perm-icon-wrap denied';
+    icon.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f06060" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    title.textContent = 'Microphone blocked';
+    sub.textContent = 'Your browser has blocked microphone access. Follow these steps to fix it:';
+    steps.style.display = 'flex';
+    badgeWrap.style.display = 'flex'; badgeWrap.style.justifyContent = 'center';
+    badge.className = 'perm-badge denied';
+    badge.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Access denied`;
+    actions.innerHTML = `<button class="btn-perm ask" onclick="requestMicPerm()">Try again</button><button class="btn-perm skip" onclick="skipMicPerm()">Use without mic</button>`;
+  }
+}
+
+async function requestMicPerm() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('getUserMedia not supported in this browser'); return;
+  }
+  showMicOverlay('asking');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+    micPermGranted = true;
+    showMicOverlay('granted');
+  } catch (err) {
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      showMicOverlay('denied');
+    } else if (err.name === 'NotFoundError') {
+      toast('No microphone found on this device');
+      showMicOverlay('denied');
+    } else {
+      toast('Mic error: ' + err.message);
+      showMicOverlay('idle');
+    }
+  }
+}
+
+function closeMicOverlay() {
+  document.getElementById('mic-overlay').classList.remove('show');
+  toast('Welcome, ' + currentUser + '!');
+}
+
+function skipMicPerm() {
+  document.getElementById('mic-overlay').classList.remove('show');
+  toast('You can enable mic access from the mic button anytime');
+  setStatus('Mic needed', 'error');
+}
+
+function signOut() {
+  stopRec();
+  currentUser = null;
+  finalTx = ''; totalSec = 0; sessions = [];
+  document.getElementById('t-text').innerHTML = '';
+  document.getElementById('t-ph').style.opacity = '1';
+  updateStats();
+  document.getElementById('sess-sect').style.display = 'none';
+  document.getElementById('wc').textContent = '0';
+  document.getElementById('cc').textContent = '0';
+  document.getElementById('dur').textContent = '0:00';
+  document.getElementById('sc').textContent = '0';
+  document.getElementById('view-app').classList.remove('active');
+  document.getElementById('view-auth').classList.add('active');
+  authTab('signin');
+}
+
+/* ─── Auth field helpers ─── */
+function fieldInput(wrapId, hintId) {
+  const w = document.getElementById(wrapId);
+  const inp = w.querySelector('input');
+  if (inp && inp.value.trim()) { w.classList.add('filled'); }
+  else { w.classList.remove('filled'); }
+}
+
+function togglePw(id, btn) {
+  const inp = document.getElementById(id);
+  const hide = inp.type === 'password';
+  inp.type = hide ? 'text' : 'password';
+  btn.innerHTML = hide
+    ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+    : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+}
+
+function checkStr() {
+  const v = document.getElementById('su-pass').value;
+  let s = 0;
+  if (v.length >= 8) s++;
+  if (/[A-Z]/.test(v)) s++;
+  if (/[0-9]/.test(v)) s++;
+  if (/[^A-Za-z0-9]/.test(v)) s++;
+  const cols = ['','#f06060','#f0a040','#7c5cfc','#22d3a0'];
+  [1,2,3,4].forEach(i => { document.getElementById('s'+i).style.background = i<=s ? cols[s] : 'var(--border2)'; });
+  const h = document.getElementById('su-pah');
+  const lbl = ['','Weak','Fair','Strong','Very strong'];
+  if (v) { h.textContent = lbl[s]; h.className = 'field-hint'+(s<=1?' err':s===2?'':' ok'); }
+}
+
+function markErr(wrapId, hintId, msg) {
+  const w = document.getElementById(wrapId);
+  w.classList.add('err');
+  const h = document.getElementById(hintId);
+  h.textContent = msg; h.className = 'field-hint err';
+  setTimeout(() => { w.classList.remove('err'); h.className = 'field-hint'; h.textContent = ''; }, 3000);
+}
+
+/* ─── Voice field input ─── */
+function voiceField(inputId, wrapId, hintId, vbarId, vtextId, fieldName) {
+  if (!SR) { toast('Speech API not supported — try Chrome/Edge'); return; }
+  const mBtnId = 'mf-' + inputId.replace('su-','su-').replace('si-','si-');
+  const mBtn = document.getElementById('mf-' + inputId);
+
+  if (activeRec) {
+    activeRec.stop(); activeRec = null;
+    if (activeMicF) activeMicF.classList.remove('active');
+    if (activeWrapF) activeWrapF.classList.remove('listening');
+    document.querySelectorAll('.voice-bar').forEach(b => b.classList.remove('show'));
+    if (activeMicF === mBtn) { activeMicF = null; activeWrapF = null; return; }
+  }
+
+  const r = new SR();
+  r.lang = 'en-US'; r.interimResults = true; r.continuous = false;
+  activeRec = r; activeMicF = mBtn; activeWrapF = document.getElementById(wrapId);
+
+  mBtn.classList.add('active');
+  activeWrapF.classList.add('listening');
+  document.getElementById(vbarId).classList.add('show');
+  document.getElementById(vtextId).textContent = 'Listening for ' + fieldName + '…';
+  const h = document.getElementById(hintId);
+  h.textContent = 'Listening…'; h.className = 'field-hint listening';
+
+  r.onresult = e => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    if (final) {
+      document.getElementById(inputId).value = final.trim();
+      fieldInput(wrapId, hintId);
+      if (inputId.includes('pass')) checkStr();
+      document.getElementById(vtextId).textContent = 'Got it!';
+      h.textContent = 'Voice input received'; h.className = 'field-hint ok';
+    } else if (interim) { document.getElementById(vtextId).textContent = interim; }
+  };
+  r.onerror = e => {
+    if (e.error !== 'aborted') endVoiceField(mBtn, wrapId, vbarId, hintId, fieldName);
+  };
+  r.onend = () => {
+    // Only clean up if this is still the active instance
+    if (activeRec === r) endVoiceField(mBtn, wrapId, vbarId, hintId, null);
+  };
+  try { r.start(); } catch(e) { toast('Could not start mic: ' + e.message); endVoiceField(mBtn, wrapId, vbarId, hintId, fieldName); }
+}
+
+function endVoiceField(btn, wrapId, vbarId, hintId, fieldName) {
+  if (btn) btn.classList.remove('active');
+  const w = document.getElementById(wrapId);
+  if (w) w.classList.remove('listening');
+  document.getElementById(vbarId).classList.remove('show');
+  if (fieldName) {
+    const h = document.getElementById(hintId);
+    if (h && !h.classList.contains('ok')) { h.textContent = 'Tap mic to speak'; h.className = 'field-hint'; }
+  }
+  activeRec = null; activeMicF = null; activeWrapF = null;
+}
+
+function stopAllVoice() {
+  if (activeRec) { try { activeRec.stop(); } catch(e){} activeRec = null; }
+  document.querySelectorAll('.mic-btn-f').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.field-wrap').forEach(w => w.classList.remove('listening'));
+  document.querySelectorAll('.voice-bar').forEach(b => b.classList.remove('show'));
+}
+
+/* ─── STT logic ─── */
+function setStatus(txt, type) {
+  const p = document.getElementById('stt-status');
+  p.textContent = txt;
+  p.className = 'status-pill' + (type ? ' ' + type : '');
+}
+
+function updateStats() {
+  const words = finalTx.trim() ? finalTx.trim().split(/\s+/).filter(Boolean).length : 0;
+  document.getElementById('wc').textContent = words;
+  document.getElementById('cc').textContent = finalTx.length;
+}
+
+function renderTx(interim) {
+  const has = finalTx || interim;
+  document.getElementById('t-ph').style.opacity = has ? '0' : '1';
+  document.getElementById('t-text').innerHTML = finalTx.replace(/\n/g,'<br>') +
+    (interim ? '<span class="interim-text"> ' + interim + '</span>' : '');
+  const box = document.querySelector('.transcript-box');
+  box.scrollTop = box.scrollHeight;
+}
+
+function startRec() {
+  if (!SR) {
+    toast('Speech API not supported — use Chrome or Edge');
+    setStatus('Not supported', 'error');
+    return;
+  }
+  if (!micPermGranted) { showMicOverlay('idle'); return; }
+
+  // Set flag and UI FIRST — before creating SR — so onend sees correct state
+  isRec = true;
+  document.getElementById('big-mic').classList.add('active');
+  setStatus('Recording…', 'recording');
+  animWave(true);
+  if (!sessStart) {
+    sessStart = Date.now();
+    timerInt = setInterval(() => {
+      const el = Math.floor((Date.now() - sessStart) / 1000) + totalSec;
+      document.getElementById('dur').textContent = Math.floor(el/60) + ':' + String(el%60).padStart(2,'0');
+    }, 300);
+  }
+
+  spawnRecognition();
+}
+
+function spawnRecognition() {
+  // Always create a FRESH instance — reusing the same one causes silent failures in Chrome
+  if (recognition) { try { recognition.abort(); } catch(e){} recognition = null; }
+  if (!isRec) return;
+
+  const r = new SR();
+  recognition = r;
+  r.continuous = true;
+  r.interimResults = true;
+  r.lang = document.getElementById('lang-sel').value;
+
+  r.onstart = () => {
+    // Confirm it actually started
+    if (isRec) setStatus('Recording…', 'recording');
+  };
+
+  r.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (res.isFinal) {
+        finalTx += res[0].transcript;
+        if (!finalTx.endsWith(' ')) finalTx += ' ';
+      } else {
+        interim += res[0].transcript;
+      }
+    }
+    renderTx(interim);
+    updateStats();
+  };
+
+  r.onerror = e => {
+    if (e.error === 'no-speech') return; // silence timeout — onend will restart
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      micPermGranted = false;
+      isRec = false;
+      recognition = null;
+      document.getElementById('big-mic').classList.remove('active');
+      setStatus('Mic blocked', 'error');
+      animWave(false);
+      clearInterval(timerInt);
+      if (sessStart) { totalSec += Math.floor((Date.now()-sessStart)/1000); sessStart = null; }
+      showMicOverlay('denied');
+      return;
+    }
+    if (e.error === 'aborted') return; // we aborted it ourselves, ignore
+    toast('Recognition error: ' + e.error);
+    setStatus('Error — retrying…', 'error');
+  };
+
+  r.onend = () => {
+    // If still recording and this is still the current instance, spawn a new one
+    if (isRec && recognition === r) {
+      setTimeout(spawnRecognition, 150);
+    }
+  };
+
+  try {
+    r.start();
+  } catch (err) {
+    toast('Could not start mic: ' + err.message);
+    isRec = false;
+    document.getElementById('big-mic').classList.remove('active');
+    setStatus('Error', 'error');
+    animWave(false);
+    clearInterval(timerInt);
+    if (sessStart) { totalSec += Math.floor((Date.now()-sessStart)/1000); sessStart = null; }
+  }
+}
+
+function stopRec() {
+  isRec = false; // Clear flag FIRST so onend doesn't restart
+  if (recognition) { try { recognition.abort(); } catch(e){} recognition = null; }
+  document.getElementById('big-mic').classList.remove('active');
+  setStatus('Ready');
+  animWave(false);
+  clearInterval(timerInt); timerInt = null;
+  if (sessStart) { totalSec += Math.floor((Date.now()-sessStart)/1000); sessStart = null; }
+  renderTx(''); // flush any interim text
+  saveSession();
+}
+
+function toggleRec() { isRec ? stopRec() : startRec(); }
+
+function onLangChange() { if (isRec) { stopRec(); setTimeout(startRec, 250); } }
+
+function saveSession() {
+  if (!finalTx.trim()) return;
+  sessions.unshift({ text: finalTx.trim(), time: new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), words: finalTx.trim().split(/\s+/).filter(Boolean).length });
+  document.getElementById('sc').textContent = sessions.length;
+  renderSessions();
+}
+
+function renderSessions() {
+  const sect = document.getElementById('sess-sect');
+  if (!sessions.length) { sect.style.display = 'none'; return; }
+  sect.style.display = 'flex';
+  const list = document.getElementById('sess-list');
+  list.innerHTML = '';
+  sessions.forEach(s => {
+    const el = document.createElement('div');
+    el.className = 'session-item';
+    el.innerHTML = `<div class="session-preview">${s.text.substring(0,80)}${s.text.length>80?'…':''}</div><div class="session-meta">${s.time} · ${s.words}w</div>`;
+    el.onclick = () => { finalTx = s.text; renderTx(''); updateStats(); toast('Session restored'); };
+    list.appendChild(el);
+  });
+}
+
+function copyTx() {
+  if (!finalTx.trim()) { toast('Nothing to copy yet'); return; }
+  navigator.clipboard.writeText(finalTx.trim()).then(() => toast('Copied to clipboard!'));
+}
+
+function dlTx() {
+  if (!finalTx.trim()) { toast('Nothing to download yet'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([finalTx.trim()],{type:'text/plain'}));
+  a.download = 'transcript-' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click(); toast('Downloaded!');
+}
+
+function clearTx() {
+  if (isRec) stopRec();
+  finalTx = ''; renderTx(''); updateStats();
+  totalSec = 0; document.getElementById('dur').textContent = '0:00';
+  toast('Transcript cleared');
+}
+
+function clearHistory() {
+  sessions = []; document.getElementById('sc').textContent = 0; renderSessions(); toast('History cleared');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target === document.body && currentUser) {
+    e.preventDefault(); toggleRec();
+  }
+});
+
+// Warn if opened via file:// — Web Speech API requires HTTPS or localhost
+window.addEventListener('load', () => {
+  if (location.protocol === 'file:') {
+    const warn = document.createElement('div');
+    warn.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#f0a04022;border-bottom:1px solid #f0a04055;color:#f0c060;font-size:12px;font-family:Sora,sans-serif;padding:10px 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;';
+    warn.innerHTML = `<span><strong style="font-weight:600;">Heads up:</strong> Web Speech API requires HTTPS. Open this file from a local server (e.g. <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:4px;">npx serve .</code>) or upload it to a web host for recording to work.</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#f0c060;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0;">×</button>`;
+    document.body.prepend(warn);
+  }
+});
+</script>
+</body>
+</html>
